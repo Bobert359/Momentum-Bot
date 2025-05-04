@@ -5,6 +5,7 @@ import threading
 from datetime import datetime, timedelta, timezone
 import requests
 from flask import Flask, jsonify
+from flask import render_template_string
 
 # === TELEGRAM KONFIGURATION ===
 telegram_token = '7793055320:AAFhsfKiAsK766lBL4olwGamBA8q6HCFtqk'
@@ -95,6 +96,96 @@ def get_status():
     except Exception as e:
         print(f"Fehler beim Abrufen des Status: {e}")
         return jsonify({"error": "Internal Server Error"}), 500
+        
+@app.route('/dashboard')
+def dashboard():
+    try:
+        current_price = get_current_price()
+        long_trades = len([t for t in open_trades if t['side'] == 'long'])
+        short_trades = len([t for t in open_trades if t['side'] == 'short'])
+
+        unrealized_pnl = 0
+        table_rows = ""
+        for t in open_trades:
+            table_rows += f"""
+                <tr>
+                    <td>{t['side'].upper()}</td>
+                    <td>{t['entry_price']:.2f}</td>
+                    <td>{t['entry_time'].strftime('%Y-%m-%d %H:%M')}</td>
+                    <td>{t['amount']}</td>
+                </tr>
+            """
+            entry = t['entry_price']
+            qty = t['amount']
+            side = t['side']
+            if side == 'long':
+                pnl = (current_price - entry) * qty
+            else:
+                pnl = (entry - current_price) * qty
+            unrealized_pnl += pnl
+
+        html = f"""
+        <html>
+        <head>
+            <title>Trading Bot Dashboard</title>
+            <meta http-equiv="refresh" content="10">
+            <style>
+                body {{ font-family: Arial; background: #f4f4f4; }}
+                h1 {{ color: #333; }}
+                table {{ width: 100%; border-collapse: collapse; }}
+                th, td {{ padding: 10px; border: 1px solid #ccc; text-align: center; }}
+                th {{ background-color: #eee; }}
+            </style>
+        </head>
+        <body>
+            <h1>📊 Trading Bot Dashboard</h1>
+
+            <!-- ✅ TradingView Chart -->
+            <div id="tradingview_chart" style="height: 500px;"></div>
+            <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+            <script type="text/javascript">
+                new TradingView.widget({
+                "width": "100%",
+                "height": 500,
+                "symbol": "BYBIT:BTCUSDT",
+                "interval": "1",
+                "timezone": "Etc/UTC",
+                "theme": "light",
+                "style": "1",
+                "locale": "de",
+                "toolbar_bg": "#f1f3f6",
+                "enable_publishing": false,
+                "withdateranges": true,
+                "hide_side_toolbar": false,
+                "allow_symbol_change": true,
+                "container_id": "tradingview_chart"
+                });
+            </script>
+
+            <p>Aktueller Preis: <strong>{current_price:.2f} USDT</strong></p>
+            <p>Offene Trades: {len(open_trades)} (Long: {long_trades} / Short: {short_trades})</p>
+            <p>📈 Unrealized PnL: <strong>{unrealized_pnl:.2f} USDT</strong></p>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Richtung</th>
+                        <th>Eintrittspreis</th>
+                        <th>Zeit</th>
+                        <th>Menge</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {table_rows}
+                </tbody>
+            </table>
+        </body>
+        </html>
+        """
+
+        return render_template_string(html)
+    except Exception as e:
+        return f"<p>Fehler beim Laden des Dashboards: {e}</p>"
 
 def fetch_ohlcv(timeframe, limit=100):
     try:
@@ -202,6 +293,10 @@ def run_bot():
             time.sleep(10)
 
 # === MAIN: Bot und Flask parallel starten ===
+@app.route('/')
+def home():
+    return '✅ Trading Bot is running!'
+
 if __name__ == '__main__':
     threading.Thread(target=run_bot).start()
     app.run(host='0.0.0.0', port=5000)
