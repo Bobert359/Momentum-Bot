@@ -104,8 +104,10 @@ def dashboard():
         long_trades = len([t for t in open_trades if t['side'] == 'long'])
         short_trades = len([t for t in open_trades if t['side'] == 'short'])
 
-        # Überprüfen, ob offene Trades vorhanden sind
-        if open_trades:
+        # Wenn keine Trades offen sind, zeige eine Nachricht an
+        if len(open_trades) == 0:
+            table_rows = "<tr><td colspan='4'>Keine offenen Trades</td></tr>"
+        else:
             table_rows = ""
             for t in open_trades:
                 table_rows += f"""
@@ -116,10 +118,7 @@ def dashboard():
                         <td>{t['amount']}</td>
                     </tr>
                 """
-        else:
-            table_rows = "<tr><td colspan='4'>Keine offenen Trades vorhanden</td></tr>"
-
-        # Unrealized PnL berechnen
+        
         unrealized_pnl = 0
         for t in open_trades:
             entry = t['entry_price']
