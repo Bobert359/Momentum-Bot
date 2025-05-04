@@ -104,17 +104,24 @@ def dashboard():
         long_trades = len([t for t in open_trades if t['side'] == 'long'])
         short_trades = len([t for t in open_trades if t['side'] == 'short'])
 
+        # Überprüfen, ob offene Trades vorhanden sind
+        if open_trades:
+            table_rows = ""
+            for t in open_trades:
+                table_rows += f"""
+                    <tr>
+                        <td>{t['side'].upper()}</td>
+                        <td>{t['entry_price']:.2f}</td>
+                        <td>{t['entry_time'].strftime('%Y-%m-%d %H:%M')}</td>
+                        <td>{t['amount']}</td>
+                    </tr>
+                """
+        else:
+            table_rows = "<tr><td colspan='4'>Keine offenen Trades vorhanden</td></tr>"
+
+        # Unrealized PnL berechnen
         unrealized_pnl = 0
-        table_rows = ""
         for t in open_trades:
-            table_rows += f"""
-                <tr>
-                    <td>{t['side'].upper()}</td>
-                    <td>{t['entry_price']:.2f}</td>
-                    <td>{t['entry_time'].strftime('%Y-%m-%d %H:%M')}</td>
-                    <td>{t['amount']}</td>
-                </tr>
-            """
             entry = t['entry_price']
             qty = t['amount']
             side = t['side']
@@ -144,7 +151,7 @@ def dashboard():
             <div id="tradingview_chart" style="height: 500px;"></div>
             <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
             <script type="text/javascript">
-                new TradingView.widget({
+              new TradingView.widget({{
                 "width": "100%",
                 "height": 500,
                 "symbol": "BYBIT:BTCUSDT",
@@ -159,7 +166,7 @@ def dashboard():
                 "hide_side_toolbar": false,
                 "allow_symbol_change": true,
                 "container_id": "tradingview_chart"
-                });
+              }});
             </script>
 
             <p>Aktueller Preis: <strong>{current_price:.2f} USDT</strong></p>
@@ -182,10 +189,10 @@ def dashboard():
         </body>
         </html>
         """
-
         return render_template_string(html)
     except Exception as e:
         return f"<p>Fehler beim Laden des Dashboards: {e}</p>"
+
 
 def fetch_ohlcv(timeframe, limit=100):
     try:
