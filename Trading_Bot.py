@@ -187,21 +187,26 @@ def place_market_order(side, amount):
 
 def run_bot():
     global open_trades, last_status_update
-    send_telegram_message("📢 Momentum Breakout Bot gestartet ✅")
+    send_telegram_message("📢 Backtest-Strategie aktiviert ✅ (2h-Breakout)")
+
     while True:
         try:
             now = datetime.now(timezone.utc)
-            df_2h = fetch_ohlcv('2h', limit=1)
+
+            # Hole 2h-Daten der letzten 100 Kerzen
+            df_2h = fetch_ohlcv('2h', limit=100)
             current_price = df_2h['close'].iloc[-1]
 
-            df_1m = fetch_ohlcv('1m', limit=30)
-            lowest = df_1m['close'].min()
-            highest = df_1m['close'].max()
+            # Verwende bisherigen Tiefst- und Höchstkurs (ohne aktuelle Kerze)
+            lowest = df_2h['low'][:-1].min()
+            highest = df_2h['high'][:-1].max()
+
             change_up = (current_price - lowest) / lowest * 100
             change_down = (current_price - highest) / highest * 100
 
             qty = round(order_size_usdt / current_price, 3)
 
+            # Long Entry
             if change_up >= trigger_pct and len(open_trades) < max_open_trades:
                 if place_market_order('buy', qty):
                     open_trades.append({
@@ -210,6 +215,7 @@ def run_bot():
                     })
                     send_telegram_message(f"🟢 LONG @ {current_price:.2f} | Menge: {qty}")
 
+            # Short Entry
             if change_down <= -trigger_pct and len(open_trades) < max_open_trades:
                 if place_market_order('sell', qty):
                     open_trades.append({
@@ -218,17 +224,18 @@ def run_bot():
                     })
                     send_telegram_message(f"🔴 SHORT @ {current_price:.2f} | Menge: {qty}")
 
+            # Offene Trades prüfen
             updated_trades = []
             for t in open_trades:
-                price_now = fetch_ohlcv('1m', limit=1)['close'].iloc[-1]
+                price_now = get_current_price()
                 pnl = ((price_now - t['entry_price']) / t['entry_price']) * 100 if t['side'] == 'long' else ((t['entry_price'] - price_now) / t['entry_price']) * 100
                 hold_minutes = (now - t['entry_time']).total_seconds() / 60
                 exit_side = 'sell' if t['side'] == 'long' else 'buy'
 
                 reason = None
-                if pnl >= profit_target:
+                if pnl >= 8.0:
                     reason = f"🎯 TP erreicht (+{pnl:.2f}%)"
-                elif pnl <= -stop_loss:
+                elif pnl <= -2.0:
                     reason = f"🛑 SL ausgelöst ({pnl:.2f}%)"
                 elif hold_minutes >= max_hold_minutes and pnl < 0:
                     reason = f"⏰ Zeitlimit ({pnl:.2f}%)"
@@ -241,6 +248,7 @@ def run_bot():
 
             open_trades = updated_trades
 
+            # Status-Update alle 15 Minuten
             if (now - last_status_update) >= timedelta(minutes=15):
                 msg = f"📊 STATUS-UPDATE\nPreis: {current_price:.2f} USDT\nOpen Trades: {len(open_trades)}\nLong: {len([t for t in open_trades if t['side'] == 'long'])} | Short: {len([t for t in open_trades if t['side'] == 'short'])}"
                 send_telegram_message(msg)
@@ -251,6 +259,7 @@ def run_bot():
         except Exception as e:
             print(f"⚠️ Botfehler: {e}")
             time.sleep(10)
+
 
 # === BOT + FLASK PARALLEL STARTEN ===
 if __name__ == '__main__':
